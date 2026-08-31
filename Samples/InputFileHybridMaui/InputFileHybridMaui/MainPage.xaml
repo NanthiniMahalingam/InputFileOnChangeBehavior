@@ -1,0 +1,12 @@
+﻿<ContentPage xmlns:local="clr-namespace:InputFileHybridMaui"
+             xmlns:shared="clr-namespace:InputFileHybridMaui.Shared;assembly=InputFileHybridMaui.Shared"
+             x:Class="InputFileHybridMaui.MainPage"
+             BackgroundColor="{DynamicResource PageBackgroundColor}">
+
+    <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html">
+        <BlazorWebView.RootComponents>
+            <RootComponent Selector="#app" ComponentType="{x:Type shared:Routes}" />
+        </BlazorWebView.RootComponents>
+    </BlazorWebView>
+
+</ContentPage>

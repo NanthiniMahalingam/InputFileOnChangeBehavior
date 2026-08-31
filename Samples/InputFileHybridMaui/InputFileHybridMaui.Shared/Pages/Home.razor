@@ -1,0 +1,287 @@
+﻿@page "/"
+
+<PageTitle>Upload files</PageTitle>
+
+<form @onsubmit="HandleSubmit" @onsubmit:preventDefault>
+    <label>
+        <InputFile OnChange="HandleFilesChanged" multiple />
+    </label>
+
+    <div aria-live="polite">
+        <div>
+            <h3>Current selection</h3>
+            <span>@selectedFiles.Count file@(selectedFiles.Count == 1 ? string.Empty : "s")</span>
+        </div>
+
+        @if (selectedFiles.Count == 0)
+        {
+            <p>No files selected.</p>
+        }
+        else
+        {
+            <div>
+                @foreach (var file in selectedFiles)
+                {
+                    <div>
+                        <span>@file.Name</span>
+                        <span>@FormatFileSize(file.Size)</span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <button type="submit" disabled="@(selectedFiles.Count == 0)">
+        Upload selected files
+    </button>
+
+    @if (submissionMessage is not null)
+    {
+        <p role="status">@submissionMessage</p>
+    }
+</form>
+
+<div aria-live="polite">
+    <div>
+        <h3>OnChange log</h3>
+        <span>@changeLog.Count notification@(changeLog.Count == 1 ? string.Empty : "s")</span>
+    </div>
+
+    @if (changeLog.Count == 0)
+    {
+        <p>Notifications will appear here.</p>
+    }
+    else
+    {
+        <div>
+            @foreach (var entry in changeLog)
+            {
+                <div>
+                    <time>@entry.Timestamp.ToString("HH:mm:ss")</time>
+                    <span>@entry.Message</span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<section>
+    <h3> Maximum file count test</h3>
+    <p>Select more than @maximumFileCount files to test <code>GetMultipleFiles(@maximumFileCount)</code>.</p>
+
+    <InputFile id="limited-file-input" OnChange="HandleLimitedFilesChanged" multiple />
+
+    <div aria-live="polite">
+        @if (fileLimitMessage is not null)
+        {
+            <p role="@(fileLimitExceeded ? "alert" : "status")">@fileLimitMessage</p>
+        }
+
+        @if (limitedFiles.Count > 0)
+        {
+            <ul>
+                @foreach (var file in limitedFiles)
+                {
+                    <li>@file.Name (@FormatFileSize(file.Size))</li>
+                }
+            </ul>
+        }
+    </div>
+</section>
+
+<section>
+    <h3>Accepted file type test</h3>
+    <p>Select a file that isn't PNG or JPEG to test the <code>accept</code> attribute.</p>
+
+    <InputFile id="accepted-file-input"
+               OnChange="HandleAcceptedFileChanged"
+               accept=".png,.jpg,.jpeg,image/png,image/jpeg" />
+
+    @if (fileTypeMessage is not null)
+    {
+        <p role="@(unsupportedFileType ? "alert" : "status")">@fileTypeMessage</p>
+    }
+</section>
+
+<section>
+    <h3>Stream read and size limit test</h3>
+    <p>Select a file larger than @FormatFileSize(maximumStreamSize) to test the <code>OpenReadStream</code> size limit.</p>
+
+    <InputFile id="stream-file-input" OnChange="HandleStreamFileChanged" />
+
+    @if (streamReadMessage is not null)
+    {
+        <p role="@(streamReadFailed ? "alert" : "status")">@streamReadMessage</p>
+    }
+</section>
+
+<section>
+    <h3>Filename edge case test</h3>
+    <p>Select files with Unicode characters, spaces, ~, or names longer than @longFilenameThreshold characters.</p>
+
+    <InputFile id="filename-test-input" OnChange="HandleFilenameTestChanged" multiple />
+
+    <div aria-live="polite">
+        @if (filenameTestResults.Count == 0)
+        {
+            <p>No filename tests selected.</p>
+        }
+        else
+        {
+            <ul>
+                @foreach (var result in filenameTestResults)
+                {
+                    <li>
+                        <strong>@result.Name</strong>
+                        <span>@result.Description</span>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</section>
+
+@code {
+    private const int maximumFileCount = 3;
+    private const long maximumStreamSize = 1024;
+    private const int longFilenameThreshold = 100;
+    private readonly List<IBrowserFile> selectedFiles = [];
+    private readonly List<IBrowserFile> limitedFiles = [];
+    private readonly List<FilenameTestResult> filenameTestResults = [];
+    private readonly List<ChangeLogEntry> changeLog = [];
+    private string? submissionMessage;
+    private string? fileLimitMessage;
+    private string? fileTypeMessage;
+    private string? streamReadMessage;
+    private bool fileLimitExceeded;
+    private bool unsupportedFileType;
+    private bool streamReadFailed;
+
+    private void HandleFilesChanged(InputFileChangeEventArgs eventArgs)
+    {
+        selectedFiles.Clear();
+        submissionMessage = null;
+
+        if (eventArgs.FileCount > 0)
+        {
+            selectedFiles.AddRange(eventArgs.GetMultipleFiles(100));
+        }
+
+        var description = selectedFiles.Count == 0
+            ? "OnChange received with no files."
+            : $"OnChange received {selectedFiles.Count} file{(selectedFiles.Count == 1 ? string.Empty : "s")}: {string.Join(", ", selectedFiles.Select(file => file.Name))}";
+
+        changeLog.Insert(0, new ChangeLogEntry(DateTime.Now, description));
+    }
+
+    private void HandleLimitedFilesChanged(InputFileChangeEventArgs eventArgs)
+    {
+        limitedFiles.Clear();
+        fileLimitExceeded = false;
+
+        try
+        {
+            limitedFiles.AddRange(eventArgs.GetMultipleFiles(maximumFileCount));
+            fileLimitMessage = $"Accepted {limitedFiles.Count} of {maximumFileCount} allowed files.";
+        }
+        catch (InvalidOperationException exception)
+        {
+            fileLimitExceeded = true;
+            fileLimitMessage = $"Limit exceeded: {exception.Message}";
+        }
+    }
+
+    private void HandleAcceptedFileChanged(InputFileChangeEventArgs eventArgs)
+    {
+        var file = eventArgs.File;
+        var extension = Path.GetExtension(file.Name);
+        unsupportedFileType = extension is not (".png" or ".jpg" or ".jpeg")
+            && extension.ToLowerInvariant() is not (".png" or ".jpg" or ".jpeg");
+
+        fileTypeMessage = unsupportedFileType
+            ? $"Unsupported file type: {file.Name} ({file.ContentType})."
+            : $"Accepted file: {file.Name} ({file.ContentType}).";
+    }
+
+    private async Task HandleStreamFileChanged(InputFileChangeEventArgs eventArgs)
+    {
+        var file = eventArgs.File;
+        streamReadFailed = false;
+        streamReadMessage = null;
+
+        try
+        {
+            await using var stream = file.OpenReadStream(maximumStreamSize);
+            using var destination = new MemoryStream();
+            await stream.CopyToAsync(destination);
+
+            streamReadMessage = $"Read {FormatFileSize(destination.Length)} from {file.Name}.";
+        }
+        catch (IOException exception)
+        {
+            streamReadFailed = true;
+            streamReadMessage = file.Size > maximumStreamSize
+                ? $"Size limit exceeded: {file.Name} is {FormatFileSize(file.Size)}; the limit is {FormatFileSize(maximumStreamSize)}."
+                : $"Stream read failed for {file.Name}: {exception.Message}";
+        }
+        catch (Exception exception)
+        {
+            streamReadFailed = true;
+            streamReadMessage = $"Unexpected stream read failure for {file.Name}: {exception.Message}";
+        }
+    }
+
+    private void HandleFilenameTestChanged(InputFileChangeEventArgs eventArgs)
+    {
+        filenameTestResults.Clear();
+
+        foreach (var file in eventArgs.GetMultipleFiles(100))
+        {
+            var traits = new List<string>();
+
+            if (file.Name.Any(char.IsWhiteSpace))
+            {
+                traits.Add("contains spaces");
+            }
+
+            if (file.Name.Contains('~'))
+            {
+                traits.Add("contains ~");
+            }
+
+            if (file.Name.Any(character => character > 127))
+            {
+                traits.Add("contains Unicode characters");
+            }
+
+            if (file.Name.Length > longFilenameThreshold)
+            {
+                traits.Add($"long name ({file.Name.Length} characters)");
+            }
+
+            var description = traits.Count == 0
+                ? "No tested filename edge cases detected."
+                : string.Join(", ", traits) + ".";
+
+            filenameTestResults.Add(new FilenameTestResult(file.Name, description));
+        }
+    }
+
+    private void HandleSubmit()
+    {
+        submissionMessage = $"Submitted {selectedFiles.Count} file{(selectedFiles.Count == 1 ? string.Empty : "s")} for upload.";
+    }
+
+    private static string FormatFileSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024d:F1} KB",
+        < 1024L * 1024 * 1024 => $"{bytes / (1024d * 1024):F1} MB",
+        _ => $"{bytes / (1024d * 1024 * 1024):F1} GB"
+    };
+
+    private sealed record ChangeLogEntry(DateTime Timestamp, string Message);
+    private sealed record FilenameTestResult(string Name, string Description);
+}
+
+

@@ -1,0 +1,215 @@
+@rendermode InteractiveServer
+@page "/input-file-onchange-test"
+
+<PageTitle>InputFile OnChange Test</PageTitle>
+
+<h1>InputFile OnChange test</h1>
+
+<EditForm Model="@Model" OnSubmit="HandleSubmit">
+    <InputFile OnChange="HandleFileChanged" multiple />
+
+    <div>Selected file count: @Model.Files.Count</div>
+    <div>Last event FileCount: @LastEventFileCount</div>
+    <div>OnChange count: @ChangeEventCount</div>
+    <div>Zero-file OnChange count: @ZeroFileChangeEventCount</div>
+
+    @foreach (var file in Model.Files)
+    {
+        <div>@file.Name (@file.Size bytes)</div>
+    }
+
+    <button type="button" disabled="@(Model.Files.Count == 0)" @onclick="UploadFiles">upload</button>
+    <button type="submit">submit</button>
+</EditForm>
+
+<div>@ActionResult</div>
+
+<h2>OnChange event log</h2>
+@foreach (var message in EventLog)
+{
+    <div>@message</div>
+}
+
+<h2>Unsupported file type test</h2>
+<InputFile OnChange="HandleTypeValidation" multiple accept=".jpg,.jpeg,.png,image/jpeg,image/png" />
+<div>Allowed file types: JPG, JPEG, PNG</div>
+<div>@TypeValidationResult</div>
+
+<h2>File size test</h2>
+<InputFile OnChange="HandleSizeValidation" />
+<div>Maximum file size: 5 MB</div>
+<div>@SizeValidationResult</div>
+
+<h2>Maximum file count test</h2>
+<InputFile OnChange="HandleMaximumFileCount" multiple />
+<div>Maximum allowed files: @MaximumFileCount</div>
+<div>Expected output when selecting more than @MaximumFileCount files: Rejected because the maximum file count was exceeded.</div>
+<div>@MaximumFileCountResult</div>
+
+<h2>Stream read test</h2>
+<InputFile OnChange="HandleStreamRead" />
+<div>Maximum stream size: 5 MB</div>
+<div>Expected: files up to 5 MB are fully read; larger files and interrupted reads report an error.</div>
+<div>@StreamReadResult</div>
+
+<h2>Special filename test</h2>
+<InputFile OnChange="HandleFilenameValidation" multiple />
+<div>Checks filenames containing Unicode, spaces, or more than @LongFilenameLength characters.</div>
+@foreach (var result in FilenameResults)
+{
+    <div>@result</div>
+}
+
+@code {
+    private const int LongFilenameLength = 100;
+    private const int MaximumFileCount = 2;
+    private const long MaximumFileSize = 5 * 1024 * 1024;
+
+    private static readonly HashSet<string> AllowedExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png" };
+
+    private int ChangeEventCount;
+    private int ZeroFileChangeEventCount;
+    private int LastEventFileCount;
+    private string ActionResult = string.Empty;
+    private string TypeValidationResult = string.Empty;
+    private string SizeValidationResult = string.Empty;
+    private string MaximumFileCountResult = string.Empty;
+    private string StreamReadResult = string.Empty;
+    private List<string> FilenameResults { get; } = [];
+    private List<string> EventLog { get; } = [];
+    private EditModel Model { get; } = new();
+
+    private void HandleFileChanged(InputFileChangeEventArgs e)
+    {
+        ChangeEventCount++;
+        LastEventFileCount = e.FileCount;
+
+        if (e.FileCount == 0)
+        {
+            ZeroFileChangeEventCount++;
+            Model.Files = [];
+        }
+        else
+        {
+            Model.Files = e.GetMultipleFiles(100);
+        }
+
+        EventLog.Insert(0,
+            $"{DateTime.Now:HH:mm:ss.fff} OnChange #{ChangeEventCount}: FileCount={e.FileCount}");
+    }
+
+    private void HandleTypeValidation(InputFileChangeEventArgs e)
+    {
+        var files = e.GetMultipleFiles(100);
+        var unsupportedFiles = files
+            .Where(file => !AllowedExtensions.Contains(Path.GetExtension(file.Name)))
+            .Select(file => file.Name)
+            .ToList();
+
+        TypeValidationResult = unsupportedFiles.Count == 0
+            ? $"Accepted {files.Count} file(s)."
+            : $"Unsupported file type: {string.Join(", ", unsupportedFiles)}";
+    }
+
+    private async Task HandleSizeValidation(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+
+        try
+        {
+            await using var stream = file.OpenReadStream(MaximumFileSize);
+            SizeValidationResult = $"Accepted: {file.Name} ({file.Size} bytes).";
+        }
+        catch (IOException)
+        {
+            SizeValidationResult =
+                $"Rejected: {file.Name} ({file.Size} bytes) exceeds the 5 MB limit.";
+        }
+    }
+
+    private void HandleMaximumFileCount(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var files = e.GetMultipleFiles(MaximumFileCount);
+            MaximumFileCountResult =
+                $"Accepted: {files.Count} file(s) selected. Maximum is {MaximumFileCount}.";
+        }
+        catch (InvalidOperationException)
+        {
+            MaximumFileCountResult =
+                $"Rejected: {e.FileCount} files selected. Maximum is {MaximumFileCount}.";
+        }
+    }
+
+    private async Task HandleStreamRead(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+
+        try
+        {
+            await using var stream = file.OpenReadStream(MaximumFileSize);
+            await stream.CopyToAsync(Stream.Null);
+            StreamReadResult = $"Read succeeded: {file.Name} ({file.Size} bytes).";
+        }
+        catch (IOException exception)
+        {
+            StreamReadResult = $"Read failed: {exception.Message}";
+        }
+        catch (JSException exception)
+        {
+            StreamReadResult = $"Browser stream failed: {exception.Message}";
+        }
+    }
+
+    private void HandleFilenameValidation(InputFileChangeEventArgs e)
+    {
+        FilenameResults.Clear();
+
+        foreach (var file in e.GetMultipleFiles(100))
+        {
+            var characteristics = new List<string>();
+
+            if (file.Name.Any(character => character > 127))
+            {
+                characteristics.Add("Unicode");
+            }
+
+            if (file.Name.Contains(' '))
+            {
+                characteristics.Add("spaces");
+            }
+
+            if (file.Name.Length > LongFilenameLength)
+            {
+                characteristics.Add($"long ({file.Name.Length} characters)");
+            }
+
+            var description = characteristics.Count == 0
+                ? "standard filename"
+                : string.Join(", ", characteristics);
+
+            FilenameResults.Add($"{file.Name} - accepted: {description}");
+        }
+    }
+
+    private void UploadFiles()
+    {
+        ActionResult = Model.Files.Count == 0
+            ? "Upload skipped: no files are selected."
+            : $"Uploading {Model.Files.Count} file(s).";
+    }
+
+    private void HandleSubmit()
+    {
+        ActionResult = Model.Files.Count == 0
+            ? "Submitted with no files."
+            : $"Submitted {Model.Files.Count} file(s).";
+    }
+
+    private sealed class EditModel
+    {
+        public IReadOnlyList<IBrowserFile> Files { get; set; } = [];
+    }
+}
