@@ -1,13 +1,35 @@
 ﻿@page "/"
+@inject InputFileHybridMaui.Shared.Services.IFormFactor FormFactor
 
 <PageTitle>Upload files</PageTitle>
 
+<section id="hybrid-test-surface" data-testid="hybrid-test-surface">
+    <h1>Hybrid WebView test</h1>
+    <dl>
+        <dt>Host</dt>
+        <dd id="host-kind">@FormFactor.GetHost()</dd>
+        <dt>Platform</dt>
+        <dd id="host-platform">@FormFactor.GetPlatform()</dd>
+        <dt>WebView runtime</dt>
+        <dd id="webview-runtime">@FormFactor.GetWebViewRuntime()</dd>
+        <dt>Picker</dt>
+        <dd id="picker-kind">@FormFactor.GetPicker()</dd>
+        <dt>Form factor</dt>
+        <dd id="host-form-factor">@FormFactor.GetFormFactor()</dd>
+    </dl>
+    <button id="webview-interaction-test" type="button" @onclick="HandleWebViewInteraction">
+        Test WebView interaction
+    </button>
+    <output id="webview-interaction-result" aria-live="polite">@webViewInteractionMessage</output>
+</section>
+
 <form @onsubmit="HandleSubmit" @onsubmit:preventDefault>
     <label>
-        <InputFile OnChange="HandleFilesChanged" multiple />
+        Select files
+        <InputFile id="primary-file-input" OnChange="HandleFilesChanged" multiple />
     </label>
 
-    <div aria-live="polite">
+    <div id="current-selection" aria-live="polite">
         <div>
             <h3>Current selection</h3>
             <span>@selectedFiles.Count file@(selectedFiles.Count == 1 ? string.Empty : "s")</span>
@@ -31,17 +53,17 @@
         }
     </div>
 
-    <button type="submit" disabled="@(selectedFiles.Count == 0)">
+    <button id="submit-files" type="submit" disabled="@(selectedFiles.Count == 0)">
         Upload selected files
     </button>
 
     @if (submissionMessage is not null)
     {
-        <p role="status">@submissionMessage</p>
+        <p id="submission-result" role="status">@submissionMessage</p>
     }
 </form>
 
-<div aria-live="polite">
+<div id="change-log" aria-live="polite">
     <div>
         <h3>OnChange log</h3>
         <span>@changeLog.Count notification@(changeLog.Count == 1 ? string.Empty : "s")</span>
@@ -74,7 +96,7 @@
     <div aria-live="polite">
         @if (fileLimitMessage is not null)
         {
-            <p role="@(fileLimitExceeded ? "alert" : "status")">@fileLimitMessage</p>
+            <p id="file-limit-result" role="@(fileLimitExceeded ? "alert" : "status")">@fileLimitMessage</p>
         }
 
         @if (limitedFiles.Count > 0)
@@ -99,7 +121,7 @@
 
     @if (fileTypeMessage is not null)
     {
-        <p role="@(unsupportedFileType ? "alert" : "status")">@fileTypeMessage</p>
+        <p id="file-type-result" role="@(unsupportedFileType ? "alert" : "status")">@fileTypeMessage</p>
     }
 </section>
 
@@ -111,7 +133,7 @@
 
     @if (streamReadMessage is not null)
     {
-        <p role="@(streamReadFailed ? "alert" : "status")">@streamReadMessage</p>
+        <p id="stream-read-result" role="@(streamReadFailed ? "alert" : "status")">@streamReadMessage</p>
     }
 </section>
 
@@ -121,7 +143,7 @@
 
     <InputFile id="filename-test-input" OnChange="HandleFilenameTestChanged" multiple />
 
-    <div aria-live="polite">
+    <div id="filename-test-results" aria-live="polite">
         @if (filenameTestResults.Count == 0)
         {
             <p>No filename tests selected.</p>
@@ -149,6 +171,7 @@
     private readonly List<IBrowserFile> limitedFiles = [];
     private readonly List<FilenameTestResult> filenameTestResults = [];
     private readonly List<ChangeLogEntry> changeLog = [];
+    private string webViewInteractionMessage = "Not tested.";
     private string? submissionMessage;
     private string? fileLimitMessage;
     private string? fileTypeMessage;
@@ -156,6 +179,11 @@
     private bool fileLimitExceeded;
     private bool unsupportedFileType;
     private bool streamReadFailed;
+
+    private void HandleWebViewInteraction()
+    {
+        webViewInteractionMessage = $"Blazor event received on {FormFactor.GetPlatform()}.";
+    }
 
     private void HandleFilesChanged(InputFileChangeEventArgs eventArgs)
     {

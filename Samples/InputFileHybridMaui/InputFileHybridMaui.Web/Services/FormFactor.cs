@@ -13,4 +13,19 @@ public class FormFactor : IFormFactor
     {
         return Environment.OSVersion.ToString();
     }
+
+    public string GetHost()
+    {
+        return "Blazor Web App";
+    }
+
+    public string GetWebViewRuntime()
+    {
+        return "Browser runtime (see browser details)";
+    }
+
+    public string GetPicker()
+    {
+        return "Browser file picker";
+    }
 }
