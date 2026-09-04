@@ -61,6 +61,17 @@
     {
         <p id="submission-result" role="status">@submissionMessage</p>
     }
+
+    <button id="post-cancellation-submit"
+            type="button"
+            @onclick="HandlePostCancellationSubmit">
+        Submit after cancelling picker
+    </button>
+
+    @if (postCancellationSubmissionMessage is not null)
+    {
+        <p id="post-cancellation-submission-result" role="status">@postCancellationSubmissionMessage</p>
+    }
 </form>
 
 <div id="change-log" aria-live="polite">
@@ -173,6 +184,7 @@
     private readonly List<ChangeLogEntry> changeLog = [];
     private string webViewInteractionMessage = "Not tested.";
     private string? submissionMessage;
+    private string? postCancellationSubmissionMessage;
     private string? fileLimitMessage;
     private string? fileTypeMessage;
     private string? streamReadMessage;
@@ -189,6 +201,7 @@
     {
         selectedFiles.Clear();
         submissionMessage = null;
+        postCancellationSubmissionMessage = null;
 
         if (eventArgs.FileCount > 0)
         {
@@ -298,6 +311,11 @@
     private void HandleSubmit()
     {
         submissionMessage = $"Submitted {selectedFiles.Count} file{(selectedFiles.Count == 1 ? string.Empty : "s")} for upload.";
+    }
+
+    private void HandlePostCancellationSubmit()
+    {
+        postCancellationSubmissionMessage = $"Post-cancellation submission received {selectedFiles.Count} file{(selectedFiles.Count == 1 ? string.Empty : "s")}: {string.Join(", ", selectedFiles.Select(file => file.Name))}.";
     }
 
     private static string FormatFileSize(long bytes) => bytes switch
